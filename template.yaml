@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Google OAuth Proxy
+
+Parameters:
+  PolicyStackNameParameter:
+    Type: String
+    Default: google-oauth-proxy-iam
+
+Resources:
+  GoogleOauthProxyLoginFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/GoogleOauthProxy.Login/publish
+      Handler: GoogleOauthProxy.Login::GoogleOauthProxy.Login.Function::FunctionHandlerAsync
+      Runtime: dotnetcore2.1
+      Timeout: 30
+      Role:
+        Fn::ImportValue:
+          !Sub "${PolicyStackNameParameter}-GoogleOauthProxyLoginFunctionRoleArn"
+      Events:
+        ClientScript:
+          Type: Api
+          Properties:
+            Path: /google-oauth/login
+            Method: get
+            RestApiId: !Ref GoogleOauthProxyApi
+  GoogleOauthProxyCallbackFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/GoogleOauthProxy.Callback/publish
+      Handler: GoogleOauthProxy.Callback::GoogleOauthProxy.Callback.Function::FunctionHandlerAsync
+      Runtime: dotnetcore2.1
+      Timeout: 30
+      Role:
+        Fn::ImportValue:
+          !Sub "${PolicyStackNameParameter}-GoogleOauthProxyCallbackFunctionRoleArn"
+      Events:
+        ClientScript:
+          Type: Api
+          Properties:
+            Path: /google-oauth/callback
+            Method: get
+            RestApiId: !Ref GoogleOauthProxyApi
+
+  GoogleOauthProxyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      DefinitionBody:
+        swagger: 2.0
+        info:
+          title: !Ref AWS::StackName
+        paths:
+          /google-oauth/login:
+            get:
+              produces:
+              - "application/json"
+              responses: {}
+              x-amazon-apigateway-integration:
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GoogleOauthProxyLoginFunction.Arn}/invocations"
+                responses:
+                  default:
+                    statusCode: "200"
+                passthroughBehaviour: "when_no_match"
+                httpMethod: "POST"
+                contextHandling: "CONVERT_TO_TEXT"
+                type: "aws_proxy"
+          /google-oauth/callback:
+            get:
+              produces:
+              - "application/json"
+              responses: {}
+              x-amazon-apigateway-integration:
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GoogleOauthProxyCallbackFunction.Arn}/invocations"
+                responses:
+                  default:
+                    statusCode: "200"
+                passthroughBehaviour: "when_no_match"
+                httpMethod: "POST"
+                contextHandling: "CONVERT_TO_TEXT"
+                type: "aws_proxy"
